@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 # --- 页面配置 ---
-st.set_page_config(page_title="2025年ICNOC年终述职评分系统", layout="centered")
+st.set_page_config(page_title="2025年终述职评分系统", layout="centered")
 
 # --- 文件保存路径 ---
 DATA_FILE = "scoring_results.csv"
@@ -56,7 +56,7 @@ CRITERIA = [
 ]
 
 # --- 标题 ---
-st.title("📊 2025年ICNOC年终述职评分")
+st.title("📊 2025年终述职评分")
 st.markdown("---")
 
 # --- 第一步：实名登录信息 ---
@@ -140,3 +140,37 @@ else:
 #         st.dataframe(pd.read_csv(DATA_FILE))
 #     else:
 #         st.write("暂无数据")
+
+# ==========================================
+# ↓↓↓ 将以下代码复制到 app.py 的最末尾 ↓↓↓
+# ==========================================
+
+st.markdown("---")
+st.header("🔐 管理员后台")
+
+# 设置一个简单的密码，防止普通员工看到别人的打分
+# 你可以将 "123456" 修改为你想要的任何密码
+password = st.text_input("请输入管理员密码查看/下载数据", type="password")
+
+if password == "123456": 
+    if os.path.exists(DATA_FILE):
+        # 读取数据
+        df_result = pd.read_csv(DATA_FILE)
+        
+        st.success(f"当前共有 {len(df_result)} 条评分记录")
+        
+        # 显示数据预览
+        st.dataframe(df_result)
+        
+        # --- 核心功能：下载按钮 ---
+        # Excel打开如果有乱码，是因为编码问题，这里使用了 utf-8-sig 格式修复
+        csv = df_result.to_csv(index=False).encode('utf-8-sig')
+        
+        st.download_button(
+            label="📥 点击下载 Excel/CSV 数据文件",
+            data=csv,
+            file_name=f'ICNOC_评分结果_{datetime.now().strftime("%Y%m%d")}.csv',
+            mime='text/csv',
+        )
+    else:
+        st.info("📭 暂时还没有人提交评分数据。")
