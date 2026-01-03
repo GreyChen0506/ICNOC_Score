@@ -123,15 +123,8 @@ else: # 普通员工
 if valid_user and input_phone:
     st.markdown("---")
     st.subheader("2. 评分操作")
-
-    # 【新增逻辑 1】检查是否有提交成功的消息需要显示
-    # 这是为了在页面刷新(rerun)后，依然能看到上一条的成功提示
-    if 'success_msg' in st.session_state and st.session_state['success_msg']:
-        st.success(st.session_state['success_msg'])
-        # 显示完后清除，避免一直显示
-        st.session_state['success_msg'] = None 
     
-    # 查重逻辑
+    # 1. 先进行查重和名单逻辑
     finished_candidates = []
     if os.path.exists(DATA_FILE):
         try:
@@ -144,7 +137,7 @@ if valid_user and input_phone:
         except:
             pass 
 
-    # 下拉框显示逻辑
+    # 2. 渲染下拉框
     options_display = []
     if not available_candidates:
         st.warning("当前没有分配给您的评分任务。")
@@ -163,7 +156,7 @@ if valid_user and input_phone:
             if "✅已完成" in selected_option:
                 st.warning(f"⚠️ 您已提交过对 {candidate} 的评分，再次提交将覆盖或新增记录。")
             
-            # 评分表单
+            # 3. 渲染表单
             with st.form("scoring_form"):
                 st.markdown(f"**正在为【{candidate}】打分**")
                 scores = {}
@@ -181,6 +174,8 @@ if valid_user and input_phone:
                     st.divider()
                 
                 remarks = st.text_area("备注/建议", placeholder="请输入您的评价...")
+                
+                # 按钮位于表单最下方
                 submitted = st.form_submit_button("提交评分", type="primary", use_container_width=True)
                 
                 if submitted:
@@ -198,17 +193,22 @@ if valid_user and input_phone:
                     
                     df_new = pd.DataFrame([record])
                     
-                    # 保存到CSV
                     if not os.path.exists(DATA_FILE):
                         df_new.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
                     else:
                         df_new.to_csv(DATA_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
                     
-                    # 【新增逻辑 2】将成功消息存入 session_state，而不是直接显示
+                    # 将消息存入 session state
                     st.session_state['success_msg'] = f"🎉 提交成功！【{candidate}】总分：{total_score}。请继续为下一位评分。"
                     
                     # 刷新页面
                     st.rerun()
+
+            # 4. 【关键修改】在表单(with st.form)结束后，检查并显示消息
+            # 这样消息就会出现在提交按钮的视觉下方
+            if 'success_msg' in st.session_state and st.session_state['success_msg']:
+                st.success(st.session_state['success_msg'])
+                st.session_state['success_msg'] = None # 显示一次后清除
 
 elif valid_user and not input_phone:
     st.warning("👉 请输入电话号码以开启评分区域。")
