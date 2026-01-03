@@ -123,6 +123,13 @@ else: # 普通员工
 if valid_user and input_phone:
     st.markdown("---")
     st.subheader("2. 评分操作")
+
+    # 【新增逻辑 1】检查是否有提交成功的消息需要显示
+    # 这是为了在页面刷新(rerun)后，依然能看到上一条的成功提示
+    if 'success_msg' in st.session_state and st.session_state['success_msg']:
+        st.success(st.session_state['success_msg'])
+        # 显示完后清除，避免一直显示
+        st.session_state['success_msg'] = None 
     
     # 查重逻辑
     finished_candidates = []
@@ -139,7 +146,6 @@ if valid_user and input_phone:
 
     # 下拉框显示逻辑
     options_display = []
-    # 确保 available_candidates 不为空
     if not available_candidates:
         st.warning("当前没有分配给您的评分任务。")
     else:
@@ -168,7 +174,7 @@ if valid_user and input_phone:
                     st.caption(f"标准：{criterion['desc']} | 参考：{criterion['guide']}")
                     score = st.slider(
                         "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.9),
-                        key=f"{candidate}_{criterion['item']}_{role}" # 唯一key
+                        key=f"{candidate}_{criterion['item']}_{role}" 
                     )
                     scores[criterion['item']] = score
                     total_score += score
@@ -198,13 +204,15 @@ if valid_user and input_phone:
                     else:
                         df_new.to_csv(DATA_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
                     
-                    st.success(f"🎉 提交成功！总分：{total_score}")
-                    st.rerun() # 提交后刷新页面以更新下拉列表状态
+                    # 【新增逻辑 2】将成功消息存入 session_state，而不是直接显示
+                    st.session_state['success_msg'] = f"🎉 提交成功！【{candidate}】总分：{total_score}。请继续为下一位评分。"
+                    
+                    # 刷新页面
+                    st.rerun()
 
 elif valid_user and not input_phone:
     st.warning("👉 请输入电话号码以开启评分区域。")
-
-# ==========================================
+    
 # 5. 管理员后台
 # ==========================================
 st.markdown("---")
