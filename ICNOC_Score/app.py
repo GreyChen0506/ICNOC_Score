@@ -6,7 +6,7 @@ from datetime import datetime
 # ==========================================
 # 1. 基础配置
 # ==========================================
-st.set_page_config(page_title="2025年ICNOC年终述职评分", layout="centered")
+st.set_page_config(page_title="2025年终述职评分", layout="centered")
 DATA_FILE = "scoring_results.csv"  # 结果保存的文件名
 
 # ==========================================
@@ -239,7 +239,7 @@ if valid_user and input_phone:
                     st.caption(f"{criterion['desc']}") 
                     st.caption(f"💡 参考标准：{criterion['guide']}") 
                     score = st.slider(
-                        "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.9),
+                        "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.8),
                         key=f"{candidate}_{criterion['item']}_{role}" 
                     )
                     scores[criterion['item']] = score
