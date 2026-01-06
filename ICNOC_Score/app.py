@@ -6,14 +6,14 @@ from datetime import datetime
 # ==========================================
 # 1. 基础配置
 # ==========================================
-st.set_page_config(page_title="2025年终述职评分", layout="centered")
+st.set_page_config(page_title="2025年ICNOC年终述职评分", layout="centered")
 DATA_FILE = "scoring_results.csv"  # 结果保存的文件名
 
 # ==========================================
 # 2. 数据定义
 # ==========================================
 
-# --- A. 排序主名单 ---
+# --- A. 排序主名单 (用于下拉菜单排序，保持不变) ---
 MASTER_ORDER = [
     "刘颖", "邓子悟", "曲博", "陈绮霞", "张学兵", 
     "孙维涛", "张妍", "张远", "任思聪", "楚红涛", 
@@ -21,16 +21,20 @@ MASTER_ORDER = [
     "时晓鹏", "谭雪洁", "李雨翔", "张萌"
 ]
 
-# --- B. 述职候选人分组 ---
-CANDIDATES_GROUP_1 = ["曲博", "陈绮霞"]
-CANDIDATES_GROUP_2 = [
+# --- B. 述职候选人 (矩阵表的行) ---
+# 根据矩阵表，共有15位述职人员
+# 第1组
+TARGETS_GROUP_1 = ["曲博", "陈绮霞"]
+# 第2组 (3-15号)
+TARGETS_GROUP_2 = [
     "张远", "任思聪", "楚红涛", "王锡仕", "张赟", 
     "林武隽", "韩慧", "贾育", "时晓鹏", "张妍", 
     "谭雪洁", "李雨翔", "张萌"
 ]
-ALL_CANDIDATES = list(set(CANDIDATES_GROUP_1 + CANDIDATES_GROUP_2 + MASTER_ORDER))
+# 所有被考评人
+ALL_TARGETS = TARGETS_GROUP_1 + TARGETS_GROUP_2
 
-# --- C. 部门列表 (作为下拉选项) ---
+# --- C. 部门列表 (员工代表选择用) ---
 DEPARTMENTS = [
     "云网综合运营管理部", 
     "属地服务与支撑发展部", 
@@ -42,11 +46,12 @@ DEPARTMENTS = [
     "安全运营中心", 
     "云网数字化开发式运营中心", 
     "基础业务保障中心", 
-    "云网运营部/ICNOC", 
-    "其他部门" # 只有选择这个才可以看到所有人
+    "ICNOC/云网运营部 (高层/综合)", 
+    "其他部门"
 ]
 
-# --- D. 部门-人员映射表 (限制普通员工打分范围) ---
+# --- D. 部门-人员映射表 (用于员工代表筛选) ---
+# 依然基于之前的职务表整理
 DEPT_LEADER_MAPPING = {
     "云网综合运营管理部": ["曲博"],
     "属地服务与支撑发展部": ["陈绮霞"],
@@ -58,24 +63,38 @@ DEPT_LEADER_MAPPING = {
     "安全运营中心": ["韩慧"],
     "云网数字化开发式运营中心": ["贾育"],
     "基础业务保障中心": ["孙维涛", "时晓鹏", "张妍"], 
-    "云网运营部/ICNOC": ["刘颖", "邓子悟", "张学兵"] 
+    "ICNOC/云网运营部 (高层/综合)": ["刘颖", "邓子悟", "张学兵"] 
 }
 
-# --- E. 领导/专家权限字典 ---
+# --- E. 领导/评委权限字典 (核心逻辑修改) ---
 LEADER_PERMISSIONS = {}
-LEADER_PERMISSIONS["段冰"] = ALL_CANDIDATES
+
+# 1. 段冰：打所有人 (1-15号)
+LEADER_PERMISSIONS["段冰"] = ALL_TARGETS
+
+# 2. 刘颖、邓子悟：只打第1组 (曲博、陈绮霞)
 for name in ["刘颖", "邓子悟"]:
-    LEADER_PERMISSIONS[name] = CANDIDATES_GROUP_1
+    LEADER_PERMISSIONS[name] = TARGETS_GROUP_1
+
+# 3. 曲博、陈绮霞：互相打分
 LEADER_PERMISSIONS["曲博"] = ["陈绮霞"]
 LEADER_PERMISSIONS["陈绮霞"] = ["曲博"]
 
-GROUP_2_SCORERS = [
-    "张学兵", "孙维涛", "张远", "任思聪", "楚红涛", 
-    "张赟", "林武隽", "韩慧", "贾育"
+# 4. 张学兵、孙维涛：打第2组所有人 (3-15号)
+for name in ["张学兵", "孙维涛"]:
+    LEADER_PERMISSIONS[name] = TARGETS_GROUP_2
+
+# 5. 第2组互评圈 (列中的打分人)
+# 注意：王锡仕虽然是被考评人(Row 6)，但他不在打分人列(Column)中，所以没有打分权限
+SCORERS_GROUP_2 = [
+    "张远", "任思聪", "楚红涛", "张赟", "林武隽", "韩慧", "贾育"
 ]
-for scorer in GROUP_2_SCORERS:
-    target_list = [p for p in CANDIDATES_GROUP_2 if p != scorer]
-    LEADER_PERMISSIONS[scorer] = target_list
+
+for scorer in SCORERS_GROUP_2:
+    # 逻辑：打分范围是 TARGETS_GROUP_2 (3-15号)，但排除自己
+    # 例如：张远可以打 任思聪...张萌，但不能打张远
+    can_score_list = [p for p in TARGETS_GROUP_2 if p != scorer]
+    LEADER_PERMISSIONS[scorer] = can_score_list
 
 # ==========================================
 # 3. 评分标准
@@ -116,11 +135,15 @@ CRITERIA = [
 # ==========================================
 # 4. 页面逻辑
 # ==========================================
-st.title("📊 2025年终述职评分")
+st.title("📊 2025年ICNOC年终述职评分")
 st.markdown("---")
 
-# --- 第一步：角色选择 ---
-role = st.radio("请选择您的身份：", ("部门经理/总监", "普通员工"), horizontal=True)
+# --- 第一步：角色选择 (名称已修改) ---
+role = st.radio(
+    "请选择您的身份：", 
+    ("二级部门班子成员/三级总监", "员工代表"), 
+    horizontal=True
+)
 
 valid_user = False
 available_candidates = []
@@ -136,29 +159,34 @@ with col2:
     input_phone = st.text_input("联系电话", placeholder="请输入手机号")
 
 # 逻辑分支
-if role == "部门经理/总监":
+if role == "二级部门班子成员/三级总监":
     if input_name:
         if input_name in LEADER_PERMISSIONS:
             valid_user = True
             available_candidates = LEADER_PERMISSIONS[input_name]
-            user_dept = "部门经理/总监"
+            user_dept = "班子成员/总监"
             st.success(f"✅ 身份验证通过：{input_name}")
         else:
-            st.error("❌ 未在部门领导中找到您的名字，请核对或切换为“普通员工”身份。")
+            # 增加一些提示，避免王锡仕等人(在名单但非评委)困惑
+            st.error("❌ 未在评分评委名单中找到您的名字。如果您是述职人员但不在评委列（如王锡仕、时晓鹏等），请切换为“员工代表”或联系管理员。")
 
-else: # 普通员工
+else: # 员工代表
     user_dept = st.selectbox("请选择您所在的部门", DEPARTMENTS)
     
     if input_name:
         valid_user = True
         
         if user_dept == "其他部门":
-            available_candidates = [p for p in MASTER_ORDER if p in ALL_CANDIDATES]
+            # 如果是“其他部门”，显示所有人（但会按照MASTER_ORDER排序）
+            available_candidates = [p for p in MASTER_ORDER if p in ALL_TARGETS or p in DEPT_LEADER_MAPPING.get("ICNOC/云网运营部 (高层/综合)", [])]
+            # 这里简单处理：让员工能打所有在列表里的人
+            available_candidates = [p for p in MASTER_ORDER] 
             st.info(f"👋 欢迎您，{input_name}。您可以对 所有人员 进行打分。")
         else:
             # 使用映射表过滤
             dept_leaders = DEPT_LEADER_MAPPING.get(user_dept, [])
-            available_candidates = [p for p in dept_leaders if p in ALL_CANDIDATES]
+            # 确保只显示在排序名单里的人
+            available_candidates = [p for p in dept_leaders if p in MASTER_ORDER]
             
             if available_candidates:
                 st.info(f"👋 欢迎您，{input_name}。您只能对本部门 ({user_dept}) 的领导进行打分。")
@@ -183,18 +211,21 @@ if valid_user and input_phone:
         except:
             pass 
 
-    # 2. 排序
+    # 2. 排序 (核心要求：按之前的顺序排列)
     def sort_key(name):
         try:
             return MASTER_ORDER.index(name)
         except ValueError:
             return 999
-    available_candidates.sort(key=sort_key)
+    
+    # 只有当列表不为空时才排序，防止报错
+    if available_candidates:
+        available_candidates.sort(key=sort_key)
 
-    # 3. 渲染
+    # 3. 渲染下拉框
     options_display = []
     if not available_candidates:
-        st.warning("当前列表为空，请确认部门选择是否正确。")
+        st.warning("当前列表为空，请确认部门选择是否正确，或您是否有评分任务。")
     else:
         for c in available_candidates:
             if c in finished_candidates:
@@ -220,7 +251,7 @@ if valid_user and input_phone:
                     st.caption(f"{criterion['desc']}") 
                     st.caption(f"💡 参考标准：{criterion['guide']}") 
                     score = st.slider(
-                        "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.8),
+                        "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.9),
                         key=f"{candidate}_{criterion['item']}_{role}" 
                     )
                     scores[criterion['item']] = score
@@ -252,6 +283,7 @@ if valid_user and input_phone:
                     st.session_state['success_msg'] = f"🎉 提交成功！【{candidate}】总分：{total_score}。请继续为下一位评分。"
                     st.rerun()
 
+            # 成功提示 (在按钮下方)
             if 'success_msg' in st.session_state and st.session_state['success_msg']:
                 st.success(st.session_state['success_msg'])
                 st.session_state['success_msg'] = None
@@ -260,12 +292,12 @@ elif valid_user and not input_phone:
     st.warning("👉 请输入电话号码以开启评分区域。")
 
 # ==========================================
-# 5. 管理员后台 (已恢复)
+# 5. 管理员后台
 # ==========================================
 st.markdown("---")
 with st.expander("🔐 管理员后台"):
     password = st.text_input("管理员密码", type="password")
-    if password == "020304": 
+    if password == "123456": 
         if os.path.exists(DATA_FILE):
             df_result = pd.read_csv(DATA_FILE)
             st.write(f"📊 数据预览 (共 {len(df_result)} 条)")
