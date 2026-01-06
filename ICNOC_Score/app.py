@@ -6,7 +6,7 @@ from datetime import datetime
 # ==========================================
 # 1. 基础配置
 # ==========================================
-st.set_page_config(page_title="2025年终述职评分", layout="centered")
+st.set_page_config(page_title="2025年ICNOC年终述职评分", layout="centered")
 DATA_FILE = "scoring_results.csv"  # 结果保存的文件名
 
 # ==========================================
@@ -180,4 +180,123 @@ else: # 员工代表
             st.info(f"👋 欢迎您，{input_name}。您只能对本部门 ({user_dept}) 的领导进行打分。")
         else:
             # 防止某个部门没有映射到人（比如映射表写错了，或者该部门领导不在述职名单里）
-            st.warning(f
+            st.warning(f"⚠️ {user_dept} 暂无需要述职的考评对象。")
+
+# --- 第三步：打分操作 ---
+if valid_user and input_phone:
+    st.markdown("---")
+    st.subheader("2. 评分操作")
+    
+    # 1. 查重
+    finished_candidates = []
+    if os.path.exists(DATA_FILE):
+        try:
+            df_exist = pd.read_csv(DATA_FILE)
+            if "评分人姓名" in df_exist.columns and "评分人电话" in df_exist.columns:
+                finished_candidates = df_exist[
+                    (df_exist["评分人姓名"] == input_name) & 
+                    (df_exist["评分人电话"] == input_phone)
+                ]["被考评人"].tolist()
+        except:
+            pass 
+
+    # 2. 排序 (始终保持MASTER_ORDER顺序)
+    def sort_key(name):
+        try:
+            return MASTER_ORDER.index(name)
+        except ValueError:
+            return 999
+    
+    if available_candidates:
+        available_candidates.sort(key=sort_key)
+
+    # 3. 渲染下拉框
+    options_display = []
+    if not available_candidates:
+        st.warning("当前列表为空，请确认部门选择是否正确。")
+    else:
+        for c in available_candidates:
+            if c in finished_candidates:
+                options_display.append(f"{c} (✅已完成)")
+            else:
+                options_display.append(c)
+
+        selected_option = st.selectbox("请选择被考评人", options_display)
+        
+        if selected_option:
+            candidate = selected_option.split(" (")[0]
+            
+            if "✅已完成" in selected_option:
+                st.warning(f"⚠️ 您已提交过对 {candidate} 的评分，再次提交将覆盖或新增记录。")
+            
+            with st.form("scoring_form"):
+                st.markdown(f"**正在为【{candidate}】打分**")
+                scores = {}
+                total_score = 0
+                
+                for criterion in CRITERIA:
+                    st.markdown(f"**{criterion['item']}**")
+                    st.caption(f"{criterion['desc']}") 
+                    st.caption(f"💡 参考标准：{criterion['guide']}") 
+                    score = st.slider(
+                        "得分", 0, criterion['max_score'], int(criterion['max_score'] * 0.9),
+                        key=f"{candidate}_{criterion['item']}_{role}" 
+                    )
+                    scores[criterion['item']] = score
+                    total_score += score
+                    st.divider()
+                
+                remarks = st.text_area("备注/建议", placeholder="请输入您的评价...")
+                submitted = st.form_submit_button("提交评分", type="primary", use_container_width=True)
+                
+                if submitted:
+                    record = {
+                        "提交时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "身份类型": role,
+                        "评分人部门": user_dept,
+                        "评分人姓名": input_name,
+                        "评分人电话": input_phone,
+                        "被考评人": candidate,
+                        **scores,
+                        "总分": total_score,
+                        "备注": remarks
+                    }
+                    
+                    df_new = pd.DataFrame([record])
+                    if not os.path.exists(DATA_FILE):
+                        df_new.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+                    else:
+                        df_new.to_csv(DATA_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
+                    
+                    st.session_state['success_msg'] = f"🎉 提交成功！【{candidate}】总分：{total_score}。请继续为下一位评分。"
+                    st.rerun()
+
+            # 成功提示
+            if 'success_msg' in st.session_state and st.session_state['success_msg']:
+                st.success(st.session_state['success_msg'])
+                st.session_state['success_msg'] = None
+
+elif valid_user and not input_phone:
+    st.warning("👉 请输入电话号码以开启评分区域。")
+
+# ==========================================
+# 5. 管理员后台
+# ==========================================
+st.markdown("---")
+with st.expander("🔐 管理员后台"):
+    password = st.text_input("管理员密码", type="password")
+    if password == "123456": 
+        if os.path.exists(DATA_FILE):
+            df_result = pd.read_csv(DATA_FILE)
+            st.write(f"📊 数据预览 (共 {len(df_result)} 条)")
+            st.dataframe(df_result)
+            
+            csv = df_result.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                "📥 下载完整数据表",
+                csv,
+                f'述职评分结果_{datetime.now().strftime("%Y%m%d")}.csv',
+                'text/csv'
+            )
+        else:
+            st.info("暂无数据")
