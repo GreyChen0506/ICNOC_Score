@@ -285,7 +285,7 @@ elif valid_user and not input_phone:
 st.markdown("---")
 with st.expander("🔐 管理员后台"):
     password = st.text_input("管理员密码", type="password")
-    if password == "123456": 
+    if password == "020304": 
         if os.path.exists(DATA_FILE):
             df_result = pd.read_csv(DATA_FILE)
             st.write(f"📊 数据预览 (共 {len(df_result)} 条)")
